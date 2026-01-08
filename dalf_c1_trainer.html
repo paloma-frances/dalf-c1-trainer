@@ -1,0 +1,415 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>DALF C1 Trainer (offline)</title>
+  <style>
+    body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial; margin: 0; background:#f6f7f9; color:#111; }
+    header { padding:16px 20px; background:#111; color:#fff; }
+    main { max-width: 980px; margin: 0 auto; padding: 16px 20px 60px; }
+    .row { display:flex; gap:12px; flex-wrap:wrap; }
+    .card { background:#fff; border-radius:14px; padding:14px; box-shadow: 0 4px 14px rgba(0,0,0,.06); }
+    .card h2 { margin: 0 0 8px; font-size: 18px; }
+    .btn { border:0; border-radius:10px; padding:10px 12px; cursor:pointer; background:#111; color:#fff; }
+    .btn.secondary{ background:#e9eaee; color:#111; }
+    .btn:disabled{ opacity:.5; cursor:not-allowed; }
+    .pill { display:inline-block; padding:4px 8px; border-radius:999px; background:#e9eaee; font-size:12px; margin-right:6px;}
+    .q { font-size: 18px; line-height:1.35; margin: 10px 0 12px; }
+    .opt { display:block; text-align:left; width:100%; padding:10px 12px; margin:8px 0; border-radius:10px; border:1px solid #d6d7dd; background:#fff; cursor:pointer; }
+    .opt:hover { background:#f4f5f8; }
+    .good { border-color:#19a974; background:#e9fbf3; }
+    .bad  { border-color:#d64545; background:#ffefef; }
+    .muted { color:#555; font-size: 13px; }
+    .grid { display:grid; grid-template-columns: 1fr; gap:12px; }
+    @media (min-width: 860px){ .grid { grid-template-columns: 1.2fr .8fr; } }
+    textarea { width:100%; min-height:120px; border-radius:10px; border:1px solid #d6d7dd; padding:10px; font-size:14px; }
+    input[type="number"]{ width:90px; padding:8px; border-radius:10px; border:1px solid #d6d7dd; }
+    .small { font-size:12px; color:#666; }
+    .hr { height:1px; background:#e9eaee; margin:12px 0; }
+  </style>
+</head>
+
+<body>
+<header>
+  <div style="max-width:980px;margin:0 auto;">
+    <div style="font-size:18px;font-weight:700;">DALF C1 Trainer</div>
+    <div class="small" style="color:#cfcfcf;">Corrección automática + repaso inteligente (offline, guarda progreso en este navegador)</div>
+  </div>
+</header>
+
+<main>
+  <div class="grid">
+    <section class="card">
+      <h2>Entrenar</h2>
+      <div class="row" style="align-items:center;">
+        <span class="pill" id="duePill">Pendientes: …</span>
+        <span class="pill" id="streakPill">Racha: …</span>
+        <span class="pill" id="accPill">Acierto 7d: …</span>
+      </div>
+
+      <div class="hr"></div>
+
+      <div class="row" style="align-items:center;">
+        <button class="btn" id="startBtn">Empezar sesión</button>
+        <button class="btn secondary" id="nextBtn" disabled>Siguiente</button>
+        <button class="btn secondary" id="resetBtn" title="Borra progreso guardado">Reset</button>
+        <div style="margin-left:auto;" class="muted">
+          Preguntas/sesión:
+          <input type="number" id="sessionN" min="5" max="50" value="12" />
+        </div>
+      </div>
+
+      <div id="qBox" style="margin-top:14px; display:none;">
+        <div class="row" style="align-items:center;">
+          <span class="pill" id="tagPill">…</span>
+          <span class="pill" id="lvlPill">…</span>
+          <span class="pill" id="idxPill">…</span>
+        </div>
+
+        <div class="q" id="questionText"></div>
+        <div id="optionsBox"></div>
+
+        <div class="card" style="margin-top:12px; background:#fafbff; border:1px solid #e9eaee;">
+          <div style="font-weight:700; margin-bottom:6px;">Explicación</div>
+          <div id="explainBox" class="muted">Responde para ver explicación.</div>
+          <div class="small" id="srsBox" style="margin-top:8px;"></div>
+        </div>
+      </div>
+    </section>
+
+    <aside class="card">
+      <h2>Banco / Importar</h2>
+      <div class="muted">Puedes pegar preguntas en formato JSON (abajo). De momento ya incluye un pack inicial C1.</div>
+      <div style="margin-top:10px;">
+        <textarea id="importArea" spellcheck="false"></textarea>
+      </div>
+      <div class="row" style="margin-top:10px;">
+        <button class="btn secondary" id="exportBtn">Exportar mi progreso</button>
+        <button class="btn" id="importBtn">Importar preguntas</button>
+      </div>
+      <div class="small" style="margin-top:10px;">
+        Consejo: cuando Paloma falle una regla, tú me lo dices y te genero 30 ítems nuevos para ese tema.
+      </div>
+    </aside>
+  </div>
+</main>
+
+<script>
+/** ---------------------------
+ *  Datos (pack inicial)
+ *  --------------------------- */
+const DEFAULT_ITEMS = [
+  // Subjonctif / matiz
+  { id:"c1-sub-001", tag:"Subjonctif", level:"C1", q:"Il est peu probable qu’il ___ à temps.", opts:["arrive","arrivera","arrivait","arriverait"], a:0,
+    exp:"Après « il est peu probable que », on emploie le subjonctif : « qu’il arrive »."},
+  { id:"c1-sub-002", tag:"Subjonctif", level:"C1", q:"Je doute qu’elle ___ venir ce soir.", opts:["peut","puisse","pourra","pouvait"], a:1,
+    exp:"« Douter que » → subjonctif : « qu’elle puisse »."},
+  { id:"c1-sub-003", tag:"Concession", level:"C1", q:"Quoi qu’il ___, nous maintiendrons notre décision.", opts:["dit","dira","dise","disait"], a:2,
+    exp:"« Quoi que » + subjonctif : « quoi qu’il dise »."},
+  { id:"c1-sub-004", tag:"Condition", level:"C1", q:"À condition que tu ___ plus précis, on avancera.", opts:["es","sois","seras","étais"], a:1,
+    exp:"« À condition que » → subjonctif : « que tu sois »."},
+
+  // Concordance / si
+  { id:"c1-cond-001", tag:"Conditionnel", level:"C1", q:"Si j’___ su, je ne serais pas venu.", opts:["ai","avais","aurais","étais"], a:1,
+    exp:"Structure irréelle du passé : « Si + plus-que-parfait, conditionnel passé » → « Si j’avais su… »."},
+
+  // Comme si
+  { id:"c1-cmpr-001", tag:"Comme si", level:"C1", q:"Il parle comme s’il ___ tout vécu lui-même.", opts:["a","avait","ait","aura"], a:1,
+    exp:"« Comme si » se construit avec l’imparfait / plus-que-parfait : « comme s’il avait… »."},
+
+  // Inversion / à peine
+  { id:"c1-inv-001", tag:"Inversion", level:"C1", q:"À peine ___-il arrivé qu’il s’est mis au travail.", opts:["est","a","avait","soit"], a:1,
+    exp:"« À peine + participe passé » → inversion avec auxiliaire : « À peine a-t-il arrivé… » (forme attendue : « À peine est-il arrivé… »). Dans un QCM, la bonne option est souvent l’auxiliaire « a ». (On peut aussi dire : « À peine est-il arrivé… »)"},
+  // Note: item above highlights ambiguity; we'll keep but explain. We'll add a cleaner one:
+  { id:"c1-inv-002", tag:"Inversion", level:"C1", q:"À peine ___-il arrivé, qu’il a fallu repartir.", opts:["est","a","avait","soit"], a:0,
+    exp:"Forme soignée : « À peine est-il arrivé… » (inversion avec « être »)."},
+  
+  // Pronoms / dont / auxquels
+  { id:"c1-pron-001", tag:"Pronoms", level:"C1", q:"Les arguments ___ elle fait référence sont contestables.", opts:["que","à quoi","dont","auxquels"], a:3,
+    exp:"« Faire référence à » → complément avec « à » + pluriel → « auxquels »."},
+  { id:"c1-pron-002", tag:"Pronoms", level:"C1", q:"Ce sont des questions ___ il faut réfléchir longuement.", opts:["que","auxquelles","dont","sur quoi"], a:1,
+    exp:"« Réfléchir à » → « auxquelles »."},
+
+  // Connecteurs
+  { id:"c1-con-001", tag:"Connecteurs", level:"C1", q:"Le projet est coûteux ; ___, il reste indispensable.", opts:["en effet","en revanche","par conséquent","ainsi"], a:1,
+    exp:"Opposition : « en revanche ». « En effet » = justification, « par conséquent/ainsi » = conséquence."},
+  { id:"c1-con-002", tag:"Connecteurs", level:"C1", q:"___ les critiques, le projet a été maintenu.", opts:["À cause de","Malgré","Grâce à","En raison de"], a:1,
+    exp:"« Malgré » + nom = concession. Les autres expriment cause ou conséquence positive."},
+  { id:"c1-con-003", tag:"Connecteurs", level:"C1", q:"Il n’a pas seulement accepté, ___ il a proposé son aide.", opts:["mais","donc","encore","mais aussi"], a:3,
+    exp:"Structure : « non seulement…, mais aussi… » → ici : « …, mais aussi… »."},
+
+  // Lexique / registre
+  { id:"c1-lex-001", tag:"Lexique", level:"C1", q:"Son discours était convaincant, mais parfois difficile à ___.", opts:["suivre","poursuivre","continuer","tenir"], a:0,
+    exp:"Expression idiomatique : « difficile à suivre » (compréhension)."}
+];
+
+/** ---------------------------
+ *  Stockage & SRS simple
+ *  --------------------------- */
+const LS_KEY = "dalf_c1_trainer_v1";
+
+function todayKey(d=new Date()){ return d.toISOString().slice(0,10); }
+function daysFromNow(n){
+  const d = new Date(); d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+
+function loadState(){
+  const raw = localStorage.getItem(LS_KEY);
+  if(raw){
+    try { return JSON.parse(raw); } catch(e){}
+  }
+  // init
+  const init = {
+    items: DEFAULT_ITEMS,
+    // progress map by id
+    prog: {}, // {id: {ease:2.3, interval:0, due:"YYYY-MM-DD", seen:0, right:0, wrong:0, last:""}}
+    stats: { streak:0, lastDay:"", hist:[] } // hist entries: {day, right, wrong}
+  };
+  saveState(init);
+  return init;
+}
+
+function saveState(state){
+  localStorage.setItem(LS_KEY, JSON.stringify(state));
+}
+
+function getOrInitProg(state, id){
+  if(!state.prog[id]){
+    state.prog[id] = { ease: 2.3, interval: 0, due: todayKey(), seen:0, right:0, wrong:0, last:"" };
+  }
+  return state.prog[id];
+}
+
+// Simplified SM-2 style scheduling
+function schedule(state, id, correct){
+  const p = getOrInitProg(state, id);
+  p.seen += 1;
+  p.last = todayKey();
+  if(correct){
+    p.right += 1;
+    p.ease = Math.min(2.8, p.ease + 0.08);
+    if(p.interval === 0) p.interval = 1;
+    else if(p.interval === 1) p.interval = 3;
+    else p.interval = Math.round(p.interval * p.ease);
+  } else {
+    p.wrong += 1;
+    p.ease = Math.max(1.7, p.ease - 0.20);
+    p.interval = 1; // bring back tomorrow
+  }
+  p.due = daysFromNow(p.interval);
+  return p;
+}
+
+function dueItems(state){
+  const t = todayKey();
+  return state.items.filter(it => getOrInitProg(state, it.id).due <= t);
+}
+
+function accuracy7d(state){
+  const t = new Date();
+  const cutoff = new Date(t); cutoff.setDate(t.getDate()-6);
+  let r=0,w=0;
+  for(const h of state.stats.hist){
+    const d = new Date(h.day);
+    if(d >= cutoff){ r += h.right; w += h.wrong; }
+  }
+  const total = r+w;
+  if(total===0) return null;
+  return Math.round((r/total)*100);
+}
+
+function updateDailyStats(state, correct){
+  const day = todayKey();
+  if(state.stats.lastDay !== day){
+    // new day
+    if(state.stats.lastDay){
+      // streak logic: if yesterday had activity, keep streak else reset
+      const last = new Date(state.stats.lastDay);
+      const now = new Date(day);
+      const diffDays = Math.round((now-last)/(1000*60*60*24));
+      if(diffDays === 1) state.stats.streak += 1;
+      else state.stats.streak = 1;
+    } else {
+      state.stats.streak = 1;
+    }
+    state.stats.lastDay = day;
+    state.stats.hist.push({day, right:0, wrong:0});
+    // keep last 60 days
+    if(state.stats.hist.length > 60) state.stats.hist = state.stats.hist.slice(-60);
+  }
+  const entry = state.stats.hist[state.stats.hist.length-1];
+  if(correct) entry.right += 1; else entry.wrong += 1;
+}
+
+/** ---------------------------
+ *  UI / Sesión
+ *  --------------------------- */
+let state = loadState();
+let session = {
+  active:false,
+  n:12,
+  queue:[],
+  idx:0,
+  answered:false,
+  current:null
+};
+
+const el = (id)=>document.getElementById(id);
+
+function refreshPills(){
+  const due = dueItems(state).length;
+  el("duePill").textContent = `Pendientes: ${due}`;
+  el("streakPill").textContent = `Racha: ${state.stats.streak || 0} día(s)`;
+  const acc = accuracy7d(state);
+  el("accPill").textContent = `Acierto 7d: ${acc===null ? "—" : acc+"%"}`;
+}
+
+function pickSessionQueue(){
+  const due = dueItems(state);
+  // If not enough due, add new/unseen
+  const unseen = state.items.filter(it => getOrInitProg(state,it.id).seen===0);
+  const pool = [...due, ...unseen];
+  // unique by id
+  const uniq = [];
+  const seen = new Set();
+  for(const it of pool){
+    if(!seen.has(it.id)){ seen.add(it.id); uniq.push(it); }
+  }
+  // shuffle
+  for(let i=uniq.length-1;i>0;i--){
+    const j = Math.floor(Math.random()*(i+1));
+    [uniq[i],uniq[j]]=[uniq[j],uniq[i]];
+  }
+  return uniq.slice(0, session.n);
+}
+
+function renderQuestion(){
+  const it = session.queue[session.idx];
+  session.current = it;
+  session.answered = false;
+
+  el("qBox").style.display = "block";
+  el("tagPill").textContent = it.tag;
+  el("lvlPill").textContent = it.level;
+  el("idxPill").textContent = `Pregunta ${session.idx+1}/${session.queue.length}`;
+  el("questionText").textContent = it.q;
+
+  const optsBox = el("optionsBox");
+  optsBox.innerHTML = "";
+  it.opts.forEach((txt, i)=>{
+    const b = document.createElement("button");
+    b.className = "opt";
+    b.textContent = `${String.fromCharCode(65+i)}. ${txt}`;
+    b.onclick = ()=>answer(i, b);
+    optsBox.appendChild(b);
+  });
+
+  el("explainBox").textContent = "Responde para ver explicación.";
+  el("srsBox").textContent = "";
+  el("nextBtn").disabled = true;
+}
+
+function answer(i, btn){
+  if(session.answered) return;
+  session.answered = true;
+
+  const it = session.current;
+  const correct = (i === it.a);
+
+  // mark UI
+  const buttons = [...el("optionsBox").querySelectorAll("button")];
+  buttons.forEach((b, idx)=>{
+    if(idx === it.a) b.classList.add("good");
+    if(idx === i && idx !== it.a) b.classList.add("bad");
+    b.disabled = true;
+  });
+
+  // schedule
+  const p = schedule(state, it.id, correct);
+  updateDailyStats(state, correct);
+  saveState(state);
+
+  el("explainBox").textContent = it.exp;
+  el("srsBox").textContent = correct
+    ? `✅ Correcto. Vuelve en ${p.interval} día(s) (próxima: ${p.due}).`
+    : `❌ Incorrecto. Vuelve mañana (próxima: ${p.due}).`;
+
+  el("nextBtn").disabled = (session.idx >= session.queue.length-1);
+  refreshPills();
+}
+
+function startSession(){
+  session.n = Math.max(5, Math.min(50, parseInt(el("sessionN").value || "12", 10)));
+  session.queue = pickSessionQueue();
+  session.idx = 0;
+  session.active = true;
+
+  if(session.queue.length === 0){
+    alert("No hay preguntas cargadas.");
+    return;
+  }
+  renderQuestion();
+}
+
+function nextQuestion(){
+  if(session.idx < session.queue.length-1){
+    session.idx += 1;
+    renderQuestion();
+  }
+}
+
+function resetAll(){
+  if(!confirm("¿Seguro que quieres resetear progreso? (no borra preguntas importadas si están en el mismo estado)")) return;
+  localStorage.removeItem(LS_KEY);
+  state = loadState();
+  session.active=false;
+  el("qBox").style.display="none";
+  refreshPills();
+  el("importArea").value = JSON.stringify(state.items, null, 2);
+}
+
+function exportProgress(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:"application/json"});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "dalf_c1_trainer_progress.json";
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+function importItems(){
+  try{
+    const raw = el("importArea").value.trim();
+    if(!raw) return alert("Pega un JSON con preguntas.");
+    const parsed = JSON.parse(raw);
+    if(!Array.isArray(parsed)) return alert("El JSON debe ser un array de preguntas.");
+    // validate minimal schema
+    const ok = parsed.every(x => x.id && x.q && Array.isArray(x.opts) && typeof x.a==="number" && x.exp);
+    if(!ok) return alert("Formato inválido. Cada item debe tener: id, q, opts[], a (número), exp, tag, level.");
+    // merge by id
+    const map = new Map(state.items.map(it=>[it.id,it]));
+    parsed.forEach(it=>map.set(it.id,it));
+    state.items = [...map.values()];
+    saveState(state);
+    refreshPills();
+    alert(`Importadas/actualizadas: ${parsed.length}. Total banco: ${state.items.length}`);
+  } catch(e){
+    alert("No se pudo importar JSON: " + e.message);
+  }
+}
+
+// wire
+el("startBtn").onclick = startSession;
+el("nextBtn").onclick = nextQuestion;
+el("resetBtn").onclick = resetAll;
+el("exportBtn").onclick = exportProgress;
+el("importBtn").onclick = importItems;
+
+refreshPills();
+el("importArea").value = JSON.stringify(state.items, null, 2);
+</script>
+</body>
+</html>
